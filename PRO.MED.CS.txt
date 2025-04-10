@@ -1,0 +1,79 @@
+krabička skládačka pak jso platíčka , platíčko má pilulky v plastu a přelepeé folii, 
+
+mám prášek a ten se skládá z léčivé látky, tu mi dodá více dodavatelů
+
+existuje jejich systém lékařský, díky každý dodavatel má certifikaci, 
+musím mít zkoušky a pro každou zemi se to liší. T5eba anglie a i	zrael je jiný.
+
+Každý dodvatel enmá všechny zkoušky a mají jinou platnost zkoušek.
+Pokud v tomto systému neají tyto zkoušky, nemůžu je zabalit a poslat na další trh.
+Dodavatel A má platnou proč čr ale ne pro GR,
+dodvatel B mí pro GR ale ne pro čr, pořád ten stejný paralen.
+
+Zkouška rozhoduje, zda může jít na trh nebo ne.  Na paralen mám plánovanou zakázku
+a jakmile ji překlápím na výrobní zakázku tak během překlápění mi to nabídne tabulku, všech možných paralenů a jejich šarží, které mám na skladě. šarže jsou od
+různých dodvatelů. Musím vybrat jen tu šarži, která je certifikovaná pro tu zemi,
+tedy platná. Pro čr můžu jen dodvatele s platným certifikátem pro čr. Systém firmy nedokáže rozpoznat vhodného dodavatele pro cílovou zemi, ukazuje to třeba 10 dodvateků.
+
+API = prášek ->sypký prášek
+MZP -> prášek tableta 
+KZM = kmenový záznam možná šarže u nich .
+
+Vymýšlely se různé řešení. 
+Udělá se Z customizační tabulka, kde se řekne,
+který výrobek může být z kterých šarží vyroben. Takže tato tabulka,
+se načte před tou hlavní a u té hlavní vyfiltruje výběr dat, tím se obsah
+dat sníží. 
+UDrž
+Tomáš to má rozjetý.
+
+Mám název materiálu PArelen(CZ) Paralen(GB), musím si z názvu vzít hodnoty
+v závorce.
+
+se11 -> 
+
+bude ALV ->zorazovací struktura ->ve struktuře bude krátký text materiálu, který nechci v databázová tabulka 
+v ALV se zobrazí excel -> stejný sloupečky -> 
+
+Budu muset transportovat, po každé změně budu muset posílat.
+
+MD04->PLZAK(plánovanou zakázku najít)->procesZAK->nesmím to uložit!!!.
+Až budu tabulku filtrovat, musím zanechat počet řádků, ale hodnoty budou prázdné, tabulak by mohla dělat neočekávané problémy.
+delete where is initial, to je finále.
+
+SAP ID(výrobek) mi říká, zda můžu používat API(prášek)
+
+SAP ID je v MARA a Název pak MAKT->maktx, důležitý je vyplnit spras
+sy-langu v MAKT verifikovat(ověřit) MTART-
+SAP ID nesmmí být nikdy na API ID!
+
+v customizační tabulce je důležité platnost.
+
+V Tabulce bude zatím SAP ID WERKS API ID PLATNOSTI ( databáze )
+v tabulce bude název.
+
+ALV bude mazat řádky, výmaz řádky -> OOP -> Pohlídat duplicity,
+žádná stejná kombinace -> 
+
+JAk to jednou edituju, tak uložím, už lze editovat jen datum.
+
+Z tabulka se vytvoří, kde kdo co změnil.
+
+SE11 musí mít jen SAP ID závod API ID Platnpst od Platnost do
+
+Osobně bych do struktury přidal platnost -> pokud není platné, tak se s tím bude pracovat. Musím se podívat, aby v kusovníku neboli v BOM nebyl žádný hotový výrobek
+API musí být buď surovina(ROH) nebo být nakupvána ( zeptat se, jak to zjistit ). Pravděpodobně HAWA
+
+COR7 = transakce pro řízení výroby
+Plánování výrobních objednávek pro šarže.
+Zadávání a úprava výrobních objednávek.
+Správa a sledování pokroku ve výrobních procesech.
+
+MTART obsahuje infromaci, zda se jedná o surovinu či nakupovaný materiál, mohu použít tuto transakci CS_BOM_EXPL_MAT_V2 ( možná jen jednu úroveň - CS_BOM_EXPL_MAT)
+
+Na první úroveň by měla stačit jen tabulka mast
+
+Je klíčové, aby MTART byl VPOL. ( ostatní jsou balící materiály a to není léčivá látka ).
+
+INN u léčiv znamená International Nonproprietary Name, což je mezinárodní nechráněný název léčivé látky. Jedná se o standardizovaný název, který je celosvětově uznávaný a používá se pro identifikaci léčivých látek bez ohledu na jejich výrobce nebo obchodní název.
+

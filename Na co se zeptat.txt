@@ -1,0 +1,79 @@
+1) Oni mají v excelu velikost šarže a my máme šarži. Je třeba doplnit políčku navíc nebo dodržet strukturu jejich excelu ?
+
+1a) Jak se vyhnout ,aby error po označení všeho nešel obejít ?
+
+2) Gris relevance editovatelná ?
+
+3) jak upravit v handle_toolbar ten text na čísla jen ?
+
+4) Zamýšlel jsem se nad situací, kdy mám 150 záznamů v SAP v customizační tabulce. K tomu z MS Excel vložím dalších 300. Nechci označovat těch 300 nových. Ani nechci označit vše a těch 150 po jednom odklikat. Tak označím prostě vše a dám tlačítko „Vložit řádek do databáze“. 150 krát na mě vyskočí hláška, kterou musím odkliknout. A také se mi u toho odemknout klíčové sloupce již uložených dat.
+
+ 
+
+Nechci ti nějak moc bourat logiku, ale „Vložit řádek do databáze“ a „Potvrdit změny řádku“ a „Odebrat záznam“ bych raději měl jako jedno tlačítko. Ulož do databáze.
+
+ 
+
+Jak bych na to asi šel. Na začátku bych si uložil kopii načtených dat. Nechal uživatele měnit a přidávat (u toho samozřejmě průběžně validoval). Až dá uložit do databáze, tak bych se podíval na svou kopii původního stavu. Z toho poznám, co přidal, upravil či vymazal. Uložil data. Kontroloval na duplicity proti databázi. Pak bych si daty, která se v pořádku uložila, přepsal kopii iniciálních dat a zase ho nechal pracovat dál.
+
+ 
+
+A pokud z transakce odcházím a mám tam data, která jsem ještě neuložil, tak bych se ho ptal, zda je chce zahodit či uložit. Pokud dá uložit a jsou tam chyby, pak znovu vysvítit, co má opravit.
+
+5)Ještě jedna drobnost.
+
+Budu mít MS Excel o 500 záznamech. Uložím si je do SAP. Na některých z nich v MS Excel udělám změnu. Nepamatuji si na kterých. Vložím je tam prostě znovu.
+
+ 
+
+Pokud mi vloží duplicitní řádky, které mají stejný klíč, ale různé datumy, pak bych při validaci nabídl (nebo udělal automaticky), zda je chce hromadně sloučit a nechal bych z každé duplicity/multiplicity jeden řádek s novými daty (je to vlastně editace). Při ukládání do databáze, kdy zjistím, že takový řádek v databázi už je (má i stejné datumy), tak ho mlčky přeskočím. Nemusím nutit uživatele odklikávat hlášky, že to nešlo uložit, protože už tam takový řádek je.
+
+6) Pro volbu „Platné“ a „Neplatné“ vyšedivět pole platnosti na vstupní obrazovce.
+
+ 
+
+Řádek 112: IF r_all = ’X’.
+
+Zde bych šel klasickou cestou pro radiobuttony.
+
+CASE ’X’.
+
+WHEN r_all.
+
+WHEN r_val.
+
+WHEN r_inval.
+
+ENDCASE.
+
+ 
+
+A pokud bys chtěl něco zajímavého, pak bych v CASE jen tvořil WHERE podmínku. Základ je stejný. Ten si dám do lv_where type string. A v CASE dolepím podmínku na datumy. Tady je úryvek z něčeho jiného:
+
+ 
+
+  METHOD read_engines.
+    DATA: lv_where      TYPE          string.
+
+************************************************************************
+* SysID restriction
+************************************************************************
+    IF it_sysid_range IS NOT INITIAL.
+      IF lv_where IS NOT INITIAL.
+        lv_where = |{ lv_where } AND |.
+      ENDIF.
+      lv_where = |{ lv_where }SYSID IN IT_SYSID_RANGE|.
+    ENDIF.
+
+************************************************************************
+* Select data
+************************************************************************
+    SELECT * FROM /sgn/sulc3engine
+      INTO CORRESPONDING FIELDS OF TABLE mt_engines
+      WHERE (lv_where).
+
+  ENDMETHOD.
+
+7) 
+
+Ještě na to koukám. Políčka Platnost do a Platnost od mi vlastně nedávají smysl. Ty bych dal pryč úplně. Dole bych měl „Všechny záznamy“, „Platné k datu“ a pole pro zadání jednoho datumu s předvyplněním na dnes, a „Neplatné záznamy“.

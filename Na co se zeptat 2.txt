@@ -1,0 +1,5 @@
+1) Nastavení názvů bez TEXT
+
+2) Jak udělat čtení bez lt_selected_rows a jak potom přizpůsobit kód
+
+3) 

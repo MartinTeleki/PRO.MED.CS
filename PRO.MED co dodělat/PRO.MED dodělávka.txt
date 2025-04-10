@@ -1,0 +1,6 @@
+Kontrola CHARG =>podle tabulky MCHA -> proti charge, msí zde být, dostranit délku 10, kontrola podle materiálu a závodu.
+MCHB  -> je šarže na sklad a závod
+MCHA  -> je pouze závod
+MCHA1 -> jenom materiál šarže, nadzávodová
+
+Já použiju MCH1 -> nám stačí, že existuje -> materiál budu kontrolovat.

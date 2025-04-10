@@ -1,0 +1,67 @@
+Chtěji:
+
+MZP_ID -> aby se podle toho vyhledávalo
+
+API_ID je tedy MZP 
+
+MPZ je u zákazníka 050, musí být VPOL. Obsahuje komponentu 30000019, je tam víckrát, vstupuju do technologického procesu víckrát. V receptuře bude jen jednou, sice několikrát, ale jednou.
+API ID má LL , jako léčivá látka
+pod MPZ najdu aPI_ID podle toho, že je LL, že je léčivá látka
+
+Další specifika, 69 je tam, a má mnoho léčivých látek a různá sapí čísla, různé možnosti přiřazení,
+á třeba léčivou látku 30000120, ta je třeba jen pro polsko
+
+Opačně se podívat, ajké má polsko možnosti APin a vyber ty bulky. Mám výrobek, vydestiluju zemi, mzp je 050, ve složitějším 069, api_id jsou ty, které mohu použítmezinárodní název 
+
+IN zařaazení - mezinárodní název pro tu účinnou látku, váže se to k léčivé látce, tedy API_ID. A v názvu znamená složení v jedné tabletě. Otázka, kde to kolega vzal, v sapu to asi nikde není vysvětlené. To půjde do klasifikace, ale zatím to tam nemáme. NEcháme to jako políčko, co půjde normálně vyplnit, nahraje se později.
+
+Velikost šarže -> farmacie funguej tak, my máme v rámci registru i velikost šarže. Máme více velikostí, ale musíme udělat takovou velikost, jakou máme zaregistrovanou. To je nějaké teoretické číslo kolem 100 000 a více. Jsou tam i ztráty, vypadne hotového výrobky pak méně. V receptuře v procesní zakázce na prvovýrobu, tak máme receptury 1 - 10 na těch 750 000 ...
+Musíme jít na recepturu 069.
+
+jak najít recepturu pro 069. transake C203 
+skupina P069 receptura 1, dostaneme se do operací.
+
+V základním množství máme těch 750 000. tukneme na mateiráy a dostaneme se do kusovníku, vybereme 1 a tam je konkrétní SAP_ID .
+
+Saneca X zznamená, že to nemáme v registraci. Je to sloupec MZP_ČSP
+
+Místo výroby ->je schováno v receptuře hotového přípravku do C203
+
+JAkmile to není externě , bude u místa výroby PMCS jako PRAMED česko
+
+MZP BOM -> kusovník meziproduktu
+
+gris_relevation -> databáze, kterou používá oddělení, zatím si doplňují ručně
+
+Máme přípravek, dke á přípravěk dvě různé léivé látky, tedy API, tedy u jednoho dodavatele je kombinace zhruba 6 variant, jak to poskládat k sobě, tam budou dvě účinné látky k destinaci. Musíme vzít obě, aby vyhovovaly tomu. Je to nejsložitější koncept, složitější matice
+
+
+
+Jak tedy budeme pracovat ?
+
+Jsme na třech úrovních -> Hotový výrobek, je škatulka a v ní je skládačka a platíčka v ních jsou léky, to je SAP_ID, abych toto vyrobil, potřebuji léky,
+tto léky se nazívá MPZ, ten lék má v sobě léčivou látku, ten MTART je tabletka a LL je léčivá látka, léčivá látka je API_ID. API ID je trojkový číslo, z toho vylisujiuu MZP a zabalím a je z toho SAP_ID
+
+Klíč je SAP_ID MPZ API_ID + závod ( šarže tam nebude ). Bude tam to MZP_ID + velikost šarže.
+
+DAlš věc, když to vybírám: mají schválěnou velikost šarží Já můžu vařit na 100 000 nebo 250 000 a nebo 1 500 000. Když navažuju, musím na desetinná místa. Buď mám řpesnou váhu, nebo vařím na větší objem. Čím větší je ten objem, tím přesněji to mám navážené. Hodně citlivé věci mi nedovolí 100 000, ale jen tu největší. Proto je zajimá, že pro danou zemi hledám jen obří dávku.
+
+Kobinace sap_id api_id mzp a velikost šarže se závodem, to se může opakovat. PRo ty 3 sapí čísla, potřebuji více možností té šarže. Ta velikost je tedy také klíč. 
+
+Místo výroby automaticky doplňováno z té receptuty. Když chci reepturu pro MZP, tak je to P + číslo materiálu třeba P069 P050. KDyž chci reepturu pro SAP_ID, tak tu první jedničku, nahradím A . Recepturu po SAP_ID nebud potřebovat, jen pro MZP.A tam je zdroj, vezmu operaci 0011, najdu zda má zašrnutou práci ve mzdě, pokud nemá, potom automaticky tam dám místo výroby PMCS. Pokud to tam je zaškrnuté, tak dodavatel se nějak jmenuje, ukázka je C203 P126. Tam je dodvatel, nějaké číslo. MK03 a číslo prodejní rognaizace bude 1000 třeba. Daotvý projekt business partnera, BUPA_ADDRESS_GET_DETAIL funkce pro funkční modul, který nalezne název dodavatele. Funguje tato funkce -> BUPA_CENTRAL_GET_DETAIL, anrvu tam číslo dodavatele a jedu,
+půjdu do es_data_organ-name1 a dám tam ta data.
+
+MZP_ČSP -> je čítač skupin postupů třeba 11, má číslo 69 tedy P069, 11 se vyrábí na 100 000. takže beru primárně s tou nejnižší hodnotou.
+
+
+VPOL, která obsahuje kusovníky, my chceme ty, které obsahují v MARA hodnotu LL v MTART
+
+
+
+
+
+
+
+
+
+

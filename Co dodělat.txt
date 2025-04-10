@@ -1,0 +1,66 @@
+1) prázdné řádky musí být na prvním místě ✅
+
+2) Přejmenovat políčko pro úpravu dat v ALV ✅
+
+3) Mít co nejlépe moderní kód ✅
+
+4) Smazat zbytečné metody ✅
+
+5) Vymyslet lepší organizaci kódu ✅
+
+6) Proměnné DATA udělat efektivnějšími ✅
+
+7) Message k hláškám ✅
+
+8) Dodělat pravidla pro vkládání dat ✅
+
+9) Doplnit kontrolu, že se jedná o VPOL ( v mém případě HALB ) ✅
+
+10) doplnit prázdný řádek s pravidly, aby se editovalo ✅
+
+11) do logu tabulky dopsat předchozí datum a současné, co bylo změněno. ✅
+
+12) ALV by mělo zařvat, že werks 9999 neexistuje ✅
+
+13)       handle_toolbar FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive, -> data change ✅
+
+14) vložit do editačního pole další řádky, pro editace 0010000 je disabled
+						       0008000 je enabled ✅
+
+15 ) Do tabulky s logy zadat změnu před a po jednotlivých polí ✅
+
+16) Dodělat Error hlášky, aby jich nebylo mraky, ale jen podle počtu✅
+
+17 ) Opravit poznámky od Toma ✅
+
+18 ) Opravit duplicity, aby to řvalo ✅
+
+19) Když přidám duplicitu, aby ten řádek byl editovatelný, když budou dva ✅
+
+20) Vložit excel a otestovat ✅
+
+21) Přidat hlášky při duplikacích ✅
+
+22) do delete update a insert do logu vložit move-coresponding✅
+
+23) Aby změna byla upravena data, musí být skutečně změna. ✅
+
+24) Přidat hlášky, když není označen žádný řádek. 
+
+25) Odebrat hlášky o duplikátech v jiných částech ✅
+
+26) Selecty mají být v loopu a ne zvlášť
+
+27) odstranit 2 a více řádků naráz
+
+28) Při vkládání nového záznamu je potřeba mít čisté staré datum
+
+29) DATA platnosti do musí být starší než od
+
+
+30) Doplnit unikátnost ne šarže, ale i závodu api_id a sap_id
+
+31) Po dvojkliku bude zobrazena historie daného materiálu
+
+32) Po označení více bude ALV 200 zobrazena a bude mít historii logů

@@ -1,0 +1,1 @@
+Co kdybych používal modify místo insert a update ? To by asi nešlo, skrze tabulku s logy ?

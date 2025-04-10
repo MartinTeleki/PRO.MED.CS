@@ -1,0 +1,1361 @@
+*&---------------------------------------------------------------------*
+*& Report ZPP_API_MATRIX_MAINT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zpp_api_matrix_maint_tmp.
+
+
+* 📌 TABLE:     ZPP_API_MATRIX
+* 📌 Structure: ZPP_API_MATRIX_STR
+
+DATA:
+  sap_id TYPE matnr,        " Hotový výrobek(léčivo) 🏷️
+  werks  TYPE werks_d,      " Kód závodu 🏭
+  api_id TYPE idnrk,        " Identifikátor API (BOM = kusovník, musí být MTART = VPOL) 🔑
+  charg  TYPE charg_d,      " Šarže materiálu 🧪
+  datuv  TYPE dats,         " Datum platnosti certifikátu 📅
+  datub  TYPE dats.         " Datum ukončení platnosti ceritifikátu 📅
+
+
+DATA  gs_variant   TYPE          disvariant.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-011.
+  SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-012.
+    SELECT-OPTIONS: s_sap_id FOR sap_id,
+                    s_werks  FOR werks,
+                    s_api_id FOR api_id,
+                    s_charg  FOR charg,
+                    s_datuv  FOR datuv,
+                    s_datub  FOR datub.
+  SELECTION-SCREEN END OF BLOCK b2.
+
+  SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-010.
+    PARAMETERS: r_all   RADIOBUTTON GROUP rb1,
+                r_val   RADIOBUTTON GROUP rb1,
+                r_inval RADIOBUTTON GROUP rb1.
+  SELECTION-SCREEN END OF BLOCK b3.
+SELECTION-SCREEN END OF BLOCK b1.
+
+* 📌  layout selection
+SELECTION-SCREEN BEGIN OF BLOCK b05 WITH FRAME TITLE TEXT-013.
+  PARAMETERS: p_varnt LIKE disvariant-variant.
+SELECTION-SCREEN END OF BLOCK b05.
+
+
+
+*TYPES: BEGIN OF ty_zpp_api_matrix_str,
+*         include    TYPE zpp_api_matrix_str,  " Vloží všechna pole z této struktury
+*         datub            TYPE dats,             " Datum finální platnosti certifikátu 📅
+*         datuv            TYPE dats,             " Datum počátční platnosti certifikátu 📅
+*         verify           TYPE char4,            " STATUS, zda certifikát je platný 🔍
+*         cellstyles TYPE lvc_t_styl,       " Stylování buněk pro ALV(Editace polí) 🖍️
+*         status     TYPE char1,
+*       END OF    ty_zpp_api_matrix_str.
+
+* INCLUDE zpp_api_matrix_str?
+TYPES: BEGIN OF ty_zpp_api_matrix_str,
+         sap_id           TYPE matnr,            " Hotový výrobek(léčivo) 🏷️
+         werks            TYPE werks_d,          " Kód závodu 🏭
+         maktx            TYPE maktx,            " Popis materiálu 📝
+         destination      TYPE char2,            " Destinace 🌍
+         inn_device       TYPE char40,           " Název léčivé látky 🖥️
+         mzp              TYPE numc2,            " Kód MZP (množství) 🔢
+         charg            TYPE charg_d,          " Šarže materiálu 🧪
+         production_plant TYPE char4,            " Kód výrobního závodu 🏭
+         mzp_csp          TYPE numc2,            " Kód CSP (Cenová specifikace) 💲
+         api_id           TYPE matnr,            " BOM(kusovník) 🆔
+         api_name         TYPE maktx,            " Krátký text kusovníku 📋
+         mzp_bc           TYPE char40,           " Kód pro BC (Business Case) 📊
+         gris_relevation  TYPE char40,
+         unique_value     TYPE int4,             " Unikátní hodnota každého záznamu
+         datuv            TYPE dats,             " Datum počátční platnosti certifikátu 📅
+         datuv_old        TYPE dats,             " Staré datum platnosti certifikátu 📅
+         datub            TYPE dats,             " Datum finální platnosti certifikátu 📅
+         datub_old        TYPE dats,             " Předchozí finální platnost certifikátu 📅
+*         unique_value     TYPE char4,           " Unikátní hodnota každého záznamu
+         verify           TYPE char4,            " STATUS, zda certifikát je platný 🔍
+         cellstyles       TYPE lvc_t_styl,       " Stylování buněk pro ALV(Editace polí) 🖍️
+         status           TYPE char1,            " Záznam, zda se podařilo data nahrát do systému
+       END OF ty_zpp_api_matrix_str.
+
+CLASS lcl_app DEFINITION.
+  PUBLIC SECTION.
+* 📌  Přidat konstanty a veřejná data
+
+    METHODS:
+      run,         " 🚀
+
+      read,        " 🕶️
+      add_row,     " 🚀
+      insert_row,  " ✅
+      update,      " ✅
+      delete,      " ❌
+      display,     " 💡
+      alv_create,  " ✅
+      alv_refresh, " 🔄
+      alv_edit,    " ✏️
+
+      handle_toolbar FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm,
+
+      handle_data_changed FOR EVENT data_changed OF cl_gui_alv_grid
+        IMPORTING er_data_changed e_onf4 e_onf4_before e_onf4_after e_ucomm.
+
+  PRIVATE SECTION.
+
+    DATA:
+      " Referenční proměnné pro ALV Grid a Custom Container 🖥️
+      mo_grid             TYPE REF TO cl_gui_alv_grid,                " ALV Grid pro zobrazení dat v tabulce 📊
+      mo_custom_container TYPE REF TO cl_gui_custom_container,        " Custom Container pro přizpůsobení vzhledu 🧰
+
+      " Tabulky pro data z matrixu zpp_api_matrix 📝
+      mt_data             TYPE TABLE OF ty_zpp_api_matrix_str.        " Hlavní data pro záznamy tabulky zpp_api_matrix_str📋
+
+
+ENDCLASS.                          "lcl_app DEFINITION
+
+CLASS lcl_app IMPLEMENTATION.
+  METHOD run.
+
+    IF p_varnt IS NOT INITIAL.
+      gs_variant-variant = p_varnt.
+    ENDIF.
+
+    read( ).
+    alv_edit( ).
+    display( ).
+  ENDMETHOD.
+
+  METHOD read.  " 🕶️
+
+    DATA:
+      " Tabulka pro záznamy z tabulky zpp_api_matrix 🖥️
+      lt_zpp_api_matrix TYPE TABLE OF zpp_api_matrix,
+
+      " Tabulka pro data z ty_zpp_api_matrix_str 📄
+      lt_data           TYPE TABLE OF ty_zpp_api_matrix_str,
+
+      " Tabulky pro Makt 📑
+      lt_makt_matnr     TYPE TABLE OF makt.  " Tabulka materiálových čísel 🏷️
+
+    " Data pro parametry 📊
+
+    CONSTANTS: lc_parts_value_1 VALUE 1 TYPE i,
+               lc_parts_value_2 VALUE 2 TYPE i.
+
+    SELECT *
+      FROM zpp_api_matrix
+      INTO CORRESPONDING FIELDS OF TABLE @lt_data
+        WHERE sap_id IN @s_sap_id
+        AND   werks  IN @s_werks
+        AND   api_id IN @s_api_id
+        AND   charg  IN @s_charg
+        AND   datuv  IN @s_datuv
+        AND   datub  IN @s_datub.
+
+**✅ naplnění daty tabulku struktury lt_data
+*    lt_data = CORRESPONDING #( lt_zpp_api_matrix ). "💡 Přesun všech řádků "OPRAVIT
+
+*✅ Naplnění tabulky s krátkým textem materiálu
+    SELECT * FROM makt
+     INTO CORRESPONDING FIELDS OF TABLE lt_makt_matnr
+     FOR ALL ENTRIES IN lt_data
+     WHERE (  matnr = lt_data-sap_id
+     OR    matnr = lt_data-api_id )
+     AND  ( spras = sy-langu
+     OR    spras = 'E' ).
+
+* ✏️ načíst maktx pro Hotový výrovek
+    LOOP AT lt_data REFERENCE INTO DATA(lr_data). "
+
+*✏️ Zjišení platnosti certifikátu
+      lr_data->verify = COND #( WHEN lr_data->datub >= sy-datum
+                                 AND lr_data->datuv <= sy-datum
+                                 AND lr_data->datub > lr_data->datuv
+                                 AND lr_data->datuv IS NOT INITIAL
+                                 THEN icon_green_light
+                                 ELSE icon_red_light ).
+
+      IF r_all = 'X' AND ( lr_data->verify = icon_green_light OR lr_data->verify = icon_red_light ).
+
+        DATA(lr_makt_matnr) = REF #( lt_makt_matnr[ matnr = lr_data->sap_id
+                                                      spras = sy-langu ] OPTIONAL ).
+
+        IF lr_makt_matnr IS INITIAL.
+          lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->sap_id ] OPTIONAL ).
+        ENDIF.
+
+        lr_data->maktx = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                 THEN lr_makt_matnr->maktx
+                                 ELSE space ).
+
+*✏️ Doplnění destinace pomocí splitu a readu
+        IF lr_data->maktx IS NOT INITIAL.
+          DATA(lv_string) = lr_data->maktx.
+          SPLIT lv_string AT '(' INTO TABLE DATA(lt_parts).
+
+          DATA(lv_substring) = lt_parts[ lc_parts_value_2 ].
+
+          SPLIT lv_substring AT ')' INTO TABLE lt_parts.
+          lv_substring = lt_parts[ lc_parts_value_1 ].
+
+          lr_data->destination = lv_substring.
+        ENDIF.
+
+
+*✏️ načíst maktx pro komponentu komponenty API_NAME
+        lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->api_id
+                                                      spras = sy-langu ] OPTIONAL ).
+
+        IF lr_makt_matnr IS INITIAL.
+          lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->api_id ] OPTIONAL ).
+        ENDIF.
+
+        lr_data->api_name = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                   THEN lr_makt_matnr->maktx
+                                   ELSE space ).
+
+        APPEND lr_data->* TO mt_data.
+
+      ELSEIF r_val = 'X' AND lr_data->verify = icon_green_light.
+
+        lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->sap_id ] OPTIONAL ).
+
+        lr_data->maktx = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                 THEN lr_makt_matnr->maktx
+                                 ELSE space ).
+
+*✏️ Doplnění destinace pomocí splitu a readu
+        IF lr_data->maktx IS NOT INITIAL.
+          lv_string = lr_data->maktx.
+          SPLIT lv_string AT '(' INTO TABLE lt_parts.
+
+          lv_substring = lt_parts[ lc_parts_value_2 ].
+
+          SPLIT lv_substring AT ')' INTO TABLE lt_parts.
+          lv_substring = lt_parts[ lc_parts_value_1 ].
+
+          lr_data->destination = lv_substring.
+        ENDIF.
+
+*✏️ načíst maktx pro komponentu komponenty API_NAME
+        lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->api_id
+                                                      spras = sy-langu ] OPTIONAL ).
+
+        IF lr_makt_matnr IS INITIAL.
+          lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->api_id ] OPTIONAL ).
+        ENDIF.
+
+        lr_data->api_name = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                   THEN lr_makt_matnr->maktx
+                                   ELSE space ).
+
+        APPEND lr_data->* TO mt_data.
+
+      ELSEIF r_inval = 'X' AND lr_data->verify = icon_red_light.
+
+        lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->sap_id ] OPTIONAL ).
+
+
+        lr_data->maktx = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                 THEN lr_makt_matnr->maktx
+                                 ELSE space ).
+
+*✏️ Doplnění destinace pomocí splitu a readu
+        IF lr_data->maktx IS NOT INITIAL.
+          lv_string = lr_data->maktx.
+          SPLIT lv_string AT '(' INTO TABLE lt_parts.
+
+          lv_substring = lt_parts[ lc_parts_value_2 ].
+
+          SPLIT lv_substring AT ')' INTO TABLE lt_parts.
+          lv_substring = lt_parts[ lc_parts_value_1 ].
+
+          lr_data->destination = lv_substring.
+        ENDIF.
+
+*✏️ načíst maktx pro komponentu komponenty API_NAME
+        lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->api_id
+                                                      spras = sy-langu ] OPTIONAL ).
+
+        IF lr_makt_matnr IS INITIAL.
+          lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->api_id ] OPTIONAL ).
+        ENDIF.
+
+        lr_data->api_name = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                   THEN lr_makt_matnr->maktx
+                                   ELSE space ).
+
+        APPEND lr_data->* TO mt_data.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD add_row.
+    " Definice struktur pro data a prázdné řádky 📊
+    DATA:
+      ls_data      TYPE ty_zpp_api_matrix_str, " Struktura pro data 📝
+      ls_empty_row TYPE ty_zpp_api_matrix_str. " Struktura pro prázdný řádek
+
+    APPEND ls_empty_row TO mt_data.
+
+  ENDMETHOD.
+
+  METHOD insert_row.
+
+    DATA:
+      " Tabulky pro Makt 📑
+      lt_makt_matnr     TYPE TABLE OF makt,  " Tabulka materiálových čísel 🏷️
+
+      " Tabulka pro vybrané řádky a proměnné pro počet řádků 📊
+      lt_selected_rows  TYPE lvc_t_row,     " Tabulka vybraných řádků 📑
+      lv_selected_rows  TYPE i,              " Počet vybraných řádků 🧮
+      lv_index          TYPE i,
+
+      " Proměnné pro matkl a další hodnoty 🛠️
+      lv_mtart          TYPE matkl,          " Kód materiálové kategorie 📦
+
+      " Data pro log tabulku 📝
+      ls_data_log       TYPE zpp_api_matrix_l,  " Logová struktura 🗂️
+
+      " Tabulka a struktura pro záznamy z tabulky zpp_api_matrix 📄
+      lt_zpp_api_matrix TYPE TABLE OF zpp_api_matrix,  " Tabulka záznamů ze zpp_api_matrix 🖥️
+      ls_data           TYPE          zpp_api_matrix.  " Struktura pro jeden záznam 📃
+
+
+    " Konstanta pro vložení dat 💾
+    CONSTANTS: lc_log_insert    TYPE char40 VALUE 'INSERT_DATA',
+               lc_parts_value_1 VALUE 1      TYPE i,
+               lc_parts_value_2 VALUE 2      TYPE i,
+               lc_index_1       VALUE 1      TYPE i,
+               lc_unique_value  VALUE 1      TYPE i,
+               lc_mtart_halb    VALUE 'HALB' TYPE mtart.
+
+    CLEAR lt_selected_rows.
+
+    CALL METHOD mo_grid->get_selected_rows
+      IMPORTING
+        et_index_rows = lt_selected_rows.
+
+    IF lt_selected_rows[] IS NOT INITIAL.
+      LOOP AT lt_selected_rows REFERENCE INTO DATA(lr_selected_data).
+
+        lv_index = lr_selected_data->index.
+
+        DATA(lr_data) = REF #( mt_data[ lv_index ] ).
+
+        IF  lr_data->sap_id IS NOT INITIAL AND lr_data->werks IS NOT INITIAL
+        AND lr_data->api_id IS NOT INITIAL AND lr_data->charg IS NOT INITIAL.
+
+          IF lr_data->datuv <= lr_data->datub.
+
+*📎 Musí se provést filtrace jen těch dat, které jsou VPOL. V testovacích případěch to bude FERT, později založím více případů 🔎 🔑
+* Kontrola existence MTART = VPOL
+            IF sy-subrc = 0.
+              SELECT SINGLE *
+                FROM mara
+                INTO @DATA(lv_mara)
+                WHERE matnr = @lr_data->api_id
+                AND   mtart = @lc_mtart_halb.         " ❗ Změnit na VPOL u zákazníka
+
+              IF sy-subrc = 0.
+
+                " Beru jen ty data těch materiálů, které chci zobrazit při vložení
+                SELECT * FROM makt
+                 INTO CORRESPONDING FIELDS OF TABLE lt_makt_matnr
+                 WHERE (  matnr = lr_data->sap_id
+                 OR    matnr = lr_data->api_id )
+                 AND  ( spras = sy-langu
+                 OR    spras = 'E' ).
+
+                CLEAR ls_data.
+                ls_data-sap_id = lr_data->sap_id. " Materiál
+                ls_data-werks  = lr_data->werks.  " Závod
+                ls_data-api_id = lr_data->api_id. " Komponenta kusovníku
+                ls_data-charg  = lr_data->charg.  " Číslo šarže
+                ls_data-datuv  = lr_data->datuv.  " Datum vytvoření
+                ls_data-datub  = lr_data->datub.  " Datum uzávěrky
+
+                " Vložení nového řádku do ZPP_API_MATRIX
+                INSERT INTO zpp_api_matrix VALUES ls_data.
+
+                IF sy-subrc = 0.    " Message, když bude bez chyby
+
+                  lr_data->status = ''.
+
+                  MESSAGE |Označené řádky byly úspěšně přidány.| TYPE 'S'.
+
+*✏️ Pokud nemá mt_data krátký text materiálu k SAP_ID
+
+                  DATA(lr_makt_matnr) = REF #( lt_makt_matnr[ matnr = lr_data->sap_id spras = sy-langu ] OPTIONAL ).
+
+                  IF lr_makt_matnr IS INITIAL.
+                    lr_makt_matnr    = REF #( lt_makt_matnr[ matnr = lr_data->sap_id  ] OPTIONAL ).
+                  ENDIF.
+
+                  lr_data->maktx = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                           THEN lr_makt_matnr->maktx
+                                           ELSE space ).
+
+*✏️ Pokud nemá mt_data krátký text materiálu k API_ID
+                  lr_makt_matnr  = REF #( lt_makt_matnr[  matnr = lr_data->api_id spras = sy-langu ] OPTIONAL ).
+
+                  IF lr_makt_matnr IS INITIAL.
+                    lr_makt_matnr = REF #( lt_makt_matnr[ matnr = lr_data->api_id ] OPTIONAL ).
+                  ENDIF.
+
+                  lr_data->api_name = COND #( WHEN lr_makt_matnr IS NOT INITIAL
+                                           THEN lr_makt_matnr->maktx
+                                           ELSE space ).
+
+*✏️ Doplnění destinace pomocí splitu a readu
+                  IF lr_data->maktx IS NOT INITIAL.
+
+                    DATA(lv_string) = lr_data->maktx.
+                    SPLIT lv_string AT '(' INTO TABLE DATA(lt_parts).
+
+                    DATA(lv_substring) = lt_parts[ lc_parts_value_2 ].
+
+                    SPLIT lv_substring AT ')' INTO TABLE lt_parts.
+                    lv_substring = lt_parts[ lc_parts_value_1 ].
+
+                    lr_data->destination = lv_substring.
+                  ENDIF.
+
+                  " Naplnění struktury pro ZPP_API_MATRIX_L
+                  MOVE-CORRESPONDING lr_data->* TO ls_data_log.
+
+                  "Hledám maximální hodnotu
+                  SELECT MAX( unique_value )
+                  FROM zpp_api_matrix_l
+                 INTO @DATA(lv_max_unique_value).
+
+
+                  ls_data_log-ernam             = sy-uname.
+                  ls_data_log-change            = lc_log_insert.
+                  ls_data_log-change_date       = sy-datum.
+                  ls_data_log-change_time       = sy-uzeit.
+                  " Seřadím si tabulku tak, abych našel nejvyšší hodnotu unikátní hodnoty.
+
+                  ls_data_log-unique_value      = lv_max_unique_value.
+
+                  ls_data_log-unique_value = COND #(
+                    WHEN ls_data_log-unique_value IS INITIAL
+                    THEN lc_unique_value
+                    WHEN ls_data_log-unique_value = 1 OR ( ls_data_log-unique_value IS NOT INITIAL AND ls_data_log-unique_value <> 1 )
+                    THEN ls_data_log-unique_value + lc_unique_value
+                    ELSE ls_data_log-unique_value ).
+
+                  " Vložení dat do logové tabulky
+                  INSERT INTO zpp_api_matrix_l VALUES ls_data_log.
+
+                ELSE. " Doplnit message, když bude špatné vložení
+                  lr_data->status = 'X'.
+
+                ENDIF.
+              ELSE.
+*            MESSAGE |Řádek číslo { sy-tabix } obsahuje SAP_ID { lr_data->sap_id }, který nemá druh materiálu VPOL.|  TYPE 'I'.
+                lr_data->status = ''.
+              ENDIF.
+            ENDIF.
+          ELSE.
+            MESSAGE |Řádek číslo { lv_index } nemohl být upraven. Finální platnost certifikátu musí být větší než počáteční platnost certifikátu.|  TYPE 'I'.
+          ENDIF.
+        ELSE.
+          MESSAGE |Řádek číslo { lv_index } nemohl být přidán. Klíčová pole nejsou vyplněna.|  TYPE 'I'.
+          lr_data->status = ''.
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      MESSAGE |Označte řádky, které mají být vloženy do databáze.|  TYPE 'I'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD update.
+
+    DATA:
+      " Tabulka pro vybrané řádky v ALV gridu 📊
+      lt_selected_rows  TYPE lvc_t_row,
+
+      " Počet vybraných řádků 🔢
+      lv_selected_rows  TYPE i,
+
+      lv_index          TYPE i,
+
+      " Tabulka pro záznamy z tabulky zpp_api_matrix 📋
+      lt_zpp_api_matrix TYPE TABLE OF zpp_api_matrix,
+
+      " Jednotlivý záznam z tabulky zpp_api_matrix 💼
+      ls_data           TYPE ty_zpp_api_matrix_str,
+
+      " Tabulka pro změny v datech 📝
+      lt_changes        TYPE zpp_api_matrix,
+
+      " Logová tabulka pro sledování změn v datech 📈
+      ls_data_log       TYPE zpp_api_matrix_l.
+
+
+    " Konstantní hodnota pro logování aktualizací 🗂️
+    CONSTANTS: lc_log_update   TYPE char40 VALUE 'UPDATE_DATA',  " Kód pro logování aktualizace 🔄
+               lc_index_1      TYPE i      VALUE 1,
+               lc_unique_value TYPE i      VALUE 1.
+
+    CLEAR lt_selected_rows.
+
+    CALL METHOD mo_grid->get_selected_rows
+      IMPORTING
+        et_index_rows = lt_selected_rows.
+
+    IF lt_selected_rows[] IS NOT INITIAL.
+      LOOP AT lt_selected_rows REFERENCE INTO DATA(lr_selected_data).
+        lv_index = lr_selected_data->index.
+
+        DATA(lr_data) = REF #( mt_data[ lv_index ] ).
+
+        IF lr_data->datuv <= lr_data->datub.
+
+          "Selectuji až v loopu pro získání původního data
+          SELECT *
+           FROM zpp_api_matrix
+           INTO TABLE lt_zpp_api_matrix
+            WHERE sap_id = lr_data->sap_id
+            AND   werks  = lr_data->werks
+            AND   charg  = lr_data->charg
+            AND   api_id = lr_data->api_id.
+
+
+          "update by mělo být možné jen tehdy, pokud došlo ke změně data.
+          ls_data_log-datuv_old         = VALUE #( lt_zpp_api_matrix[ sap_id   = lr_data->sap_id
+                                                                   werks       = lr_data->werks
+                                                                   api_id      = lr_data->api_id
+                                                                   charg       = lr_data->charg ]-datuv OPTIONAL ).
+
+          ls_data_log-datub_old          = VALUE #( lt_zpp_api_matrix[ sap_id  = lr_data->sap_id
+                                                                   werks       = lr_data->werks
+                                                                   api_id      = lr_data->api_id
+                                                                   charg       = lr_data->charg ]-datub OPTIONAL ).
+
+          " Pokud byly změněny alespoň jedny data, dojde k update.
+          IF lr_data->datuv <> ls_data_log-datuv_old OR lr_data->datub <> ls_data_log-datub_old.
+            IF sy-subrc = 0.
+
+              UPDATE zpp_api_matrix
+          SET datuv = @lr_data->datuv,
+              datub = @lr_data->datub
+          WHERE sap_id = @lr_data->sap_id
+            AND werks  = @lr_data->werks
+            AND api_id = @lr_data->api_id
+            AND charg  = @lr_data->charg.
+
+              IF sy-subrc = 0.
+                MESSAGE |Data byla pozměněna a vložena do databáze.|  TYPE 'S'.
+
+                SELECT MAX( unique_value )
+                   FROM zpp_api_matrix_l
+                  INTO @DATA(lv_max_unique_value).
+
+                " Naplnění struktury pro ZPP_API_MATRIX_L
+                MOVE-CORRESPONDING lr_data->* TO ls_data_log.
+
+                ls_data_log-ernam             = sy-uname.
+                ls_data_log-change            = lc_log_update.
+                ls_data_log-change_date       = sy-datum.
+                ls_data_log-change_time       = sy-uzeit.
+
+                ls_data_log-unique_value      = lv_max_unique_value .
+
+                " První záznam vždy bude prázdný
+                ls_data_log-unique_value = COND #(
+                  WHEN ls_data_log-unique_value IS INITIAL
+                  THEN lc_unique_value
+                  WHEN ls_data_log-unique_value = 1 OR ( ls_data_log-unique_value IS NOT INITIAL AND ls_data_log-unique_value <> 1 )
+                  THEN ls_data_log-unique_value + lc_unique_value
+                  ELSE ls_data_log-unique_value ).
+
+
+                " Vložení dat do logové tabulky
+                INSERT INTO zpp_api_matrix_l VALUES ls_data_log.
+              ELSE.
+
+                MESSAGE |Řádek číslo { lv_index } nemohl být pozměněn.|  TYPE 'I'.
+              ENDIF.
+            ENDIF.
+          ELSE.
+            MESSAGE |Řádek číslo { lv_index } obsahuje nezměněná data.|  TYPE 'I'.
+
+          ENDIF.
+        ELSE.
+          MESSAGE |Řádek číslo { lv_index } nemohl být upraven. Finální platnost certifikátu musí být větší než počáteční platnost certifikátu.|  TYPE 'I'.
+        ENDIF.
+      ENDLOOP.
+    ELSE.
+      MESSAGE |Označte řádky, které mají být upraveny.|  TYPE 'I'.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD delete.
+
+    DATA:
+      " Tabulka pro vybrané řádky v ALV gridu 📊
+      lt_selected_rows  TYPE lvc_t_row,
+
+      " Počet vybraných řádků 🔢
+      lv_selected_rows  TYPE i,
+
+      " Proměnná se SAP_ID, který se má vymazat z mt_data
+      lv_delete_sap_id  TYPE matnr,
+
+      lv_index          TYPE i,
+
+      " Logová tabulka pro sledování změn v datech 📈
+      ls_data_log       TYPE zpp_api_matrix_l,
+
+      " Tabulka pro záznamy z tabulky zpp_api_matrix 💼
+      lt_zpp_api_matrix TYPE TABLE OF zpp_api_matrix.
+
+    CONSTANTS: lc_log_delete   TYPE char40 VALUE 'DELETE_DATA',
+               lc_index_1      TYPE i VALUE 1,
+               lc_unique_value TYPE i VALUE 1.
+
+    CLEAR lt_selected_rows.
+
+
+    CALL METHOD mo_grid->get_selected_rows
+      IMPORTING
+        et_index_rows = lt_selected_rows.
+
+    IF lt_selected_rows[] IS NOT INITIAL.
+      LOOP AT lt_selected_rows REFERENCE INTO DATA(lr_selected_data).
+        lv_index = lr_selected_data->index.
+
+        DATA(lr_data) = REF #( mt_data[ lv_index ] ).
+
+        " Vymazání dat z databázové tabulky
+        DELETE FROM zpp_api_matrix
+         WHERE sap_id = @lr_data->sap_id
+           AND werks  = @lr_data->werks
+           AND api_id = @lr_data->api_id
+           AND charg  = @lr_data->charg.
+
+        IF sy-subrc = 0.
+
+          MESSAGE |Řádek byl úspěšně smazán.|  TYPE 'S'.
+
+          "Hledám maximální hodnotu
+          SELECT MAX( unique_value )
+          FROM zpp_api_matrix_l
+         INTO @DATA(lv_max_unique_value).
+
+          " Naplnění struktury pro ZPP_API_MATRIX_L
+          MOVE-CORRESPONDING lr_data->* TO ls_data_log.
+          ls_data_log-datuv_old         = lr_data->datuv.
+          ls_data_log-datub_old         = lr_data->datub.
+          ls_data_log-ernam             = sy-uname.
+          ls_data_log-change            = lc_log_delete.
+          ls_data_log-change_date       = sy-datum.
+          ls_data_log-change_time       = sy-uzeit.
+
+          ls_data_log-unique_value      = lv_max_unique_value.
+
+          ls_data_log-unique_value = COND #(
+            WHEN ls_data_log-unique_value IS INITIAL
+            THEN lc_unique_value
+            WHEN ls_data_log-unique_value = 1 OR ( ls_data_log-unique_value IS NOT INITIAL AND ls_data_log-unique_value <> 1 )
+            THEN ls_data_log-unique_value + lc_unique_value
+            ELSE ls_data_log-unique_value ).
+
+
+          " Vložení dat do logové tabulky
+          INSERT INTO zpp_api_matrix_l VALUES ls_data_log.
+
+          " Není třeba psát logické kroky, prostě jen vymažeme lr_data-> sap_id
+          CLEAR lr_data->sap_id.
+
+        ELSE.
+          MESSAGE |Řádek číslo { sy-tabix } nemohl být smazán.|  TYPE 'I'.
+        ENDIF.
+
+      ENDLOOP.
+      DELETE mt_data WHERE sap_id IS INITIAL.
+    ELSE.
+      MESSAGE |Označte řádky, které mají být odstraněny z databáze.|  TYPE 'I'.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD display.
+    CALL SCREEN 0100.
+  ENDMETHOD.
+
+  METHOD alv_create.
+
+    DATA: lt_fcat     TYPE        lvc_t_fcat,
+          ls_fcat     TYPE        lvc_s_fcat,
+          ls_layout   TYPE        lvc_s_layo,
+          lr_fieldcat TYPE REF TO lvc_s_fcat,
+          ls_exclude  TYPE        ui_func,
+          gt_exclude  TYPE        ui_functions.
+
+    DATA: ls_stylerow TYPE        lvc_s_styl,             " Styl pro řádek v ALV
+          lr_listrow  TYPE REF TO ty_zpp_api_matrix_str.  " Reference na strukturu typu ty_zpp_api_matrix_str
+
+    " 📌 Vytvoření kontejneru s názvem ALV_GRID
+    IF mo_custom_container IS INITIAL.
+      CREATE OBJECT mo_custom_container
+        EXPORTING
+          container_name = 'ALV_GRID'.
+      CREATE OBJECT mo_grid
+        EXPORTING
+          i_parent = mo_custom_container.
+
+      " 📌 Založení fieldcatalogu pro zobrazení ALV
+      CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+        EXPORTING
+          i_structure_name       = 'ZPP_API_MATRIX_STR'   " Struktura pro ALV
+        CHANGING
+          ct_fieldcat            = lt_fcat
+        EXCEPTIONS
+          inconsistent_interface = 1
+          program_error          = 2
+          OTHERS                 = 3.
+
+*✏️ Zajištění editovatelnosti prázdných řádků
+      LOOP AT mt_data REFERENCE INTO lr_listrow.
+        CLEAR lr_listrow->cellstyles.
+
+        " Podmínka pro zobrazení editace
+        lr_listrow->cellstyles = COND #(
+    WHEN (    lr_listrow->sap_id IS NOT INITIAL OR lr_listrow->werks IS NOT INITIAL
+         OR   lr_listrow->api_id IS NOT INITIAL OR lr_listrow->charg IS NOT INITIAL )
+         AND   lr_listrow->status = ''
+    THEN VALUE #(
+        ( fieldname = 'SAP_ID'            style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'WERKS'             style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'CHARG'             style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'API_ID'            style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'API_NAME'          style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MAKTX'             style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'DESTINATION'       style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'INN_DEVICE'        style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MZP'               style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'PRODUCTION_PLANT'  style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MZP_CSP'           style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MZP_BC'            style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'DATUV'             style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'DATUB'             style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'DATUV_OLD'         style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'DATUB_OLD'         style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'VERIFY'            style = cl_gui_alv_grid=>mc_style_disabled )
+    )
+    WHEN ( lr_listrow->sap_id IS INITIAL AND lr_listrow->werks IS INITIAL
+         AND   lr_listrow->api_id IS INITIAL AND lr_listrow->charg IS INITIAL )
+         AND   lr_listrow->status = ''
+    THEN VALUE #(
+        ( fieldname = 'SAP_ID'            style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'WERKS'             style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'CHARG'             style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'API_ID'            style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'API_NAME'          style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MAKTX'             style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'DESTINATION'       style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'INN_DEVICE'        style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MZP'               style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'PRODUCTION_PLANT'  style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MZP_CSP'           style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'MZP_BC'            style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'DATUV'             style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'DATUB'             style = cl_gui_alv_grid=>mc_style_enabled )
+        ( fieldname = 'DATUV_OLD'         style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'DATUB_OLD'         style = cl_gui_alv_grid=>mc_style_disabled )
+        ( fieldname = 'VERIFY'            style = cl_gui_alv_grid=>mc_style_disabled )
+    )
+
+
+    ELSE lr_listrow->cellstyles ).
+
+      ENDLOOP.
+
+      LOOP AT lt_fcat REFERENCE INTO lr_fieldcat.
+        "  📌 Umožnit editaci pro DATUV a DATUB a přejmenování sloupců.
+        CASE lr_fieldcat->fieldname.
+          WHEN 'SAP_ID'.
+
+            lr_fieldcat->coltext = 'SAP_ID'.            " Změna názvu sloupce SAP_ID
+            lr_fieldcat->key = 'X'.
+            lr_fieldcat->edit = 'X'.
+          WHEN 'WERKS'.
+            lr_fieldcat->coltext = 'Závod'.             " Změna názvu sloupce WERKS
+            lr_fieldcat->key = 'X'.
+            lr_fieldcat->edit = 'X'.
+          WHEN 'MAKTX'.
+            lr_fieldcat->coltext = 'Název'.             " Změna názvu sloupce MAKTX
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'DESTINATION'.
+            lr_fieldcat->coltext = 'Destinace'.         " Změna názvu sloupce DESTINATION
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'INN_DEVICE'.
+            lr_fieldcat->coltext = 'INN zařazení'.       " Změna názvu sloupce INN_DEVICE
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'MZP'.
+            lr_fieldcat->coltext = 'MZP'.               " Změna názvu sloupce MZP
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'CHARG'.
+            lr_fieldcat->coltext = 'Velikost šarže'.    " Změna názvu sloupce CHARG
+            lr_fieldcat->key = 'X'.
+            lr_fieldcat->edit = 'X'.
+          WHEN 'PRODUCTION_PLANT'.
+            lr_fieldcat->coltext = 'Místo výrovy'.      " Změna názvu sloupce PRODUCTION_PLANT
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'MZP_CSP'.
+            lr_fieldcat->coltext = 'MZP ČSP'.           " Změna názvu sloupce MZP_CSP
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'API_ID'.
+            lr_fieldcat->edit = 'X'.
+            lr_fieldcat->coltext = 'API ID'.            " Změna názvu sloupce API_ID
+            lr_fieldcat->key = 'X'.
+          WHEN 'API_NAME'.
+            lr_fieldcat->coltext = 'API název'.         " Změna názvu sloupce API_NAME
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'MZP_BC'.
+            lr_fieldcat->coltext = 'MZP BC'.            " Změna názvu sloupce MZP_BC
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'DATUV'.
+            lr_fieldcat->coltext = 'Platnost od'.       " Změna názvu sloupce DATUV
+            lr_fieldcat->edit = 'X'.
+            lr_fieldcat->key = 'X'.
+          WHEN 'DATUV_OLD'.
+            lr_fieldcat->coltext = 'Platnost od(OLD)'.  " Změna názvu sloupce DATUV_OLD
+*            lr_fieldcat->edit = 'X'.
+            lr_fieldcat->key = 'X'.
+            lr_fieldcat->tech = 'X'.
+          WHEN 'DATUB'.
+            lr_fieldcat->coltext = 'Platnost do'.       " Změna názvu sloupce DATUB
+            lr_fieldcat->edit = 'X'.
+            lr_fieldcat->key = 'X'.
+          WHEN 'DATUB_OLD'.
+            lr_fieldcat->coltext = 'Platnost do(OLD)'.       " Změna názvu sloupce DATUB
+*            lr_fieldcat->edit = 'X'.
+            lr_fieldcat->key = 'X'.
+            lr_fieldcat->tech = 'X'.
+          WHEN 'GRIS_RELEVATION'.
+            lr_fieldcat->coltext = 'GRIS relevance'.    " Změna názvu sloupce GRIS_RELEVATION
+*            lr_fieldcat->edit = 'X'.
+          WHEN 'VERIFY'.
+            lr_fieldcat->coltext = 'Platnost'.          " Změna názvu sloupce VERIFY
+*            lr_fieldcat->edit = 'X'.
+        ENDCASE.
+      ENDLOOP.
+
+      DELETE lt_fcat WHERE fieldname IS INITIAL.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_views.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_info.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_graph.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_print.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_check.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_refresh.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_delete_row.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_cut.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_undo.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_append_row.
+      APPEND ls_exclude TO gt_exclude.
+      ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy.
+      APPEND ls_exclude TO gt_exclude.
+
+      ls_layout-stylefname = 'CELLSTYLES'.
+      ls_layout-sel_mode   = 'A'.
+      ls_layout-zebra      = 'X'.
+      ls_layout-cwidth_opt = 'X'.
+      gs_variant-report    = sy-repid.
+      gs_variant-username  = sy-uname.
+
+      " 📌 Zobrazení modulární tabulky do ALV
+      CALL METHOD mo_grid->set_table_for_first_display
+        EXPORTING
+          is_variant                    = gs_variant
+          is_layout                     = ls_layout
+          i_save                        = 'A'
+          it_toolbar_excluding          = gt_exclude
+        CHANGING
+          it_fieldcatalog               = lt_fcat
+          it_outtab                     = mt_data
+        EXCEPTIONS
+          invalid_parameter_combination = 1
+          program_error                 = 2
+          too_many_lines                = 3
+          OTHERS                        = 4.
+
+      IF sy-subrc EQ 0.
+
+        SET HANDLER handle_toolbar                        FOR mo_grid.
+        SET HANDLER handle_user_command                   FOR mo_grid.
+        SET HANDLER handle_data_changed                   FOR mo_grid.
+
+        CALL METHOD mo_grid->set_toolbar_interactive.
+
+        CALL METHOD mo_grid->register_edit_event
+          EXPORTING
+            i_event_id = cl_gui_alv_grid=>mc_evt_enter.
+
+        CALL METHOD mo_grid->set_focus
+          EXPORTING
+            control = mo_grid.
+      ENDIF.
+    ELSE.
+      alv_refresh( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD alv_refresh.
+
+    DATA  ls_stable   TYPE lvc_s_stbl.
+
+    ls_stable-row = 'X'.
+    ls_stable-col = 'X'.
+
+    CALL METHOD mo_grid->refresh_table_display
+      EXPORTING
+        is_stable = ls_stable.
+  ENDMETHOD.
+
+  METHOD alv_edit.
+
+
+    DATA: ls_stylerow TYPE        lvc_s_styl,             " Styl pro řádek v ALV
+          lr_listrow  TYPE REF TO ty_zpp_api_matrix_str.  " Reference na strukturu typu ty_zpp_api_matrix_str
+
+
+*✏️ Zajištění editovatelnosti prázdných řádků
+    LOOP AT mt_data REFERENCE INTO lr_listrow.
+*      CLEAR lr_listrow->cellstyles.
+
+      " Podmínka pro zobrazení editace
+      lr_listrow->cellstyles = COND #(
+  WHEN (    lr_listrow->sap_id IS INITIAL OR lr_listrow->werks IS INITIAL
+       OR   lr_listrow->api_id IS INITIAL OR lr_listrow->charg IS INITIAL )
+       AND   lr_listrow->status = ''
+  THEN VALUE #(
+      ( fieldname = 'SAP_ID'            style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'WERKS'             style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'CHARG'             style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'API_ID'            style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'API_NAME'          style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MAKTX'             style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'DESTINATION'       style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'INN_DEVICE'        style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MZP'               style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'PRODUCTION_PLANT'  style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MZP_CSP'           style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MZP_BC'            style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'DATUV_OLD'         style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'DATUB_OLD'         style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'VERIFY'            style = cl_gui_alv_grid=>mc_style_disabled )
+  )
+  WHEN lr_listrow->sap_id IS NOT INITIAL
+       AND lr_listrow->werks IS NOT INITIAL
+       AND lr_listrow->api_id IS NOT INITIAL
+       AND lr_listrow->charg IS NOT INITIAL
+       AND lr_listrow->status = 'X'
+  THEN VALUE #(
+      ( fieldname = 'SAP_ID'            style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'WERKS'             style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'CHARG'             style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'API_ID'            style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'API_NAME'          style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MAKTX'             style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'DESTINATION'       style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'INN_DEVICE'        style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MZP'               style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'PRODUCTION_PLANT'  style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MZP_CSP'           style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'MZP_BC'            style = cl_gui_alv_grid=>mc_style_disabled )
+      ( fieldname = 'DATUV_OLD'         style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'DATUB_OLD'         style = cl_gui_alv_grid=>mc_style_enabled )
+      ( fieldname = 'VERIFY'            style = cl_gui_alv_grid=>mc_style_disabled )
+  )
+
+  ELSE lr_listrow->cellstyles ).
+
+*✏️ Zjišení platnosti certifikátu
+      lr_listrow->verify = COND #( WHEN lr_listrow->datub >= sy-datum
+                                   AND lr_listrow->datuv  <= sy-datum
+                                   AND lr_listrow->datub  > lr_listrow->datuv
+                                   AND lr_listrow->datuv IS NOT INITIAL
+                                   THEN icon_green_light
+                                   ELSE icon_red_light ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD handle_data_changed.
+
+    DATA: lt_error  TYPE TABLE OF lvc_s_modi, " Tabulka pro chyby
+          ls_modi   TYPE lvc_s_modi,          " Struktura pro jeden záznam o změně
+          ls_error  TYPE lvc_s_modi,          " Struktura pro chybu
+          lv_sap_id TYPE matnr,               " SAP ID pro materiál
+          lv_werks  TYPE werks_d,             " Kód závodu
+          lv_api_id TYPE idnrk,               " API ID pro identifikaci
+          lv_charg  TYPE charg_d,             " Číslo šarže
+          lv_length TYPE i.                   " Délka proměnné
+
+    DATA: ls_lane   TYPE                      ty_zpp_api_matrix_str.
+
+    CONSTANTS lc_halb TYPE mtart VALUE 'HALB'.
+
+    " Počet řádků v mt_data
+    DATA(lv_lines_data) = lines( mt_data ).
+
+    " Zjištění počtu řádků v záznamu
+    LOOP AT er_data_changed->mt_good_cells INTO ls_modi.
+      IF ls_modi-row_id > lv_lines_data.
+        DATA(lv_max_value) = ls_modi-row_id.
+      ENDIF.
+    ENDLOOP.
+
+    " Vypočítání, kolik řádků se musí přidat do mt_data.
+
+    IF lv_max_value IS NOT INITIAL.
+      DATA(lv_final_lines) = lv_max_value - lv_lines_data.
+      DO lv_final_lines TIMES.
+        APPEND ls_lane TO mt_data.
+      ENDDO.
+    ENDIF.
+
+
+    LOOP AT er_data_changed->mt_good_cells INTO ls_modi.
+
+
+      " Ověříme, zda se změnila hodnota závodu (SAP_ID)
+      IF ls_modi-fieldname = 'SAP_ID' AND ls_modi-value IS NOT INITIAL.
+        lv_sap_id = ls_modi-value.
+        SELECT SINGLE matnr
+          FROM mara
+          INTO @DATA(lv_mara)
+          WHERE matnr = @lv_sap_id.
+
+        IF sy-subrc <> 0.
+          ls_error = ls_modi.
+          APPEND ls_error TO lt_error.
+
+          IF lt_error IS NOT INITIAL.
+            LOOP AT lt_error INTO ls_modi.
+              CALL METHOD er_data_changed->add_protocol_entry
+                EXPORTING
+                  i_msgid     = 'ZMSG'
+                  i_msgty     = 'E'
+                  i_msgno     = '001'
+                  i_msgv1     = |Neplatné SAP_ID na řádku: { sy-tabix } |
+                  i_fieldname = ls_modi-fieldname
+                  i_row_id    = ls_modi-row_id.
+
+            ENDLOOP.
+
+            CLEAR: lt_error, ls_error.
+
+            " Chybná hodnota => přidáme do seznamu chyb
+          ENDIF.
+        ENDIF.
+        " Ověříme, zda se změnila hodnota závodu (WERKS)
+      ELSEIF ls_modi-fieldname = 'WERKS' AND ls_modi-value IS NOT INITIAL.
+        lv_werks = ls_modi-value.
+
+        " Zkontrolujeme, zda závod existuje v tabulce T001W
+        SELECT SINGLE werks
+          FROM t001w
+          INTO @DATA(lv_dummy)
+          WHERE werks = @lv_werks.
+        IF sy-subrc <> 0.
+
+          " Chybná hodnota => přidáme do seznamu chyb
+          ls_error = ls_modi.
+          APPEND ls_error TO lt_error.
+
+          IF lt_error IS NOT INITIAL.
+            LOOP AT lt_error INTO ls_modi.
+              CALL METHOD er_data_changed->add_protocol_entry
+                EXPORTING
+                  i_msgid     = 'ZMSG'
+                  i_msgty     = 'E'
+                  i_msgno     = '001'
+                  i_msgv1     = 'Neplatný závod'
+                  i_fieldname = ls_modi-fieldname
+                  i_row_id    = ls_modi-row_id.
+
+            ENDLOOP.
+
+            CLEAR: lt_error, ls_error.
+          ENDIF.
+        ENDIF.
+      ELSEIF ls_modi-fieldname = 'API_ID' AND ls_modi-value IS NOT INITIAL.
+        lv_api_id = ls_modi-value.
+        SELECT SINGLE matnr
+          FROM mara
+          INTO @lv_mara
+          WHERE matnr = @lv_api_id.
+
+        IF sy-subrc <> 0.
+          " Chybná hodnota => přidáme do seznamu chyb
+          ls_error = ls_modi.
+          APPEND ls_error TO lt_error.
+
+          IF lt_error IS NOT INITIAL.
+            LOOP AT lt_error INTO ls_modi.
+              CALL METHOD er_data_changed->add_protocol_entry
+                EXPORTING
+                  i_msgid     = 'ZMSG'
+                  i_msgty     = 'E'
+                  i_msgno     = '001'
+                  i_msgv1     = 'Neplatné API_ID'
+                  i_fieldname = ls_modi-fieldname
+                  i_row_id    = ls_modi-row_id.
+
+            ENDLOOP.
+
+            CLEAR: lt_error, ls_error.
+          ENDIF.
+
+        ELSE.
+          " Pokud je záznam v MATNR, ale není HALB(VPOL u zákazníka)
+          SELECT SINGLE matnr
+            FROM mara
+            INTO @lv_mara
+            WHERE matnr = @lv_api_id
+            AND   mtart = @lc_halb.
+
+          IF sy-subrc <> 0.
+            ls_error = ls_modi.
+            APPEND ls_error TO lt_error.
+
+            IF lt_error IS NOT INITIAL.
+              LOOP AT lt_error INTO ls_modi.
+                CALL METHOD er_data_changed->add_protocol_entry
+                  EXPORTING
+                    i_msgid     = 'ZMSG'
+                    i_msgty     = 'E'
+                    i_msgno     = '001'
+                    i_msgv1     = 'SAP_ID není typ materiálu HALB.'
+                    i_fieldname = ls_modi-fieldname
+                    i_row_id    = ls_modi-row_id.
+
+              ENDLOOP.
+
+              CLEAR: lt_error, ls_error.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ELSEIF ls_modi-fieldname = 'CHARG' AND ls_modi-value IS NOT INITIAL.
+
+        lv_length = 10.
+        lv_charg = ls_modi-value.
+
+        SELECT SINGLE charg
+          INTO @DATA(lv_charg_tmp)
+          FROM zpp_api_matrix
+          WHERE charg = @lv_charg.
+
+        IF sy-subrc = 0.
+          ls_error = ls_modi.
+          APPEND ls_error TO lt_error.
+          LOOP AT lt_error INTO ls_modi.
+            CALL METHOD er_data_changed->add_protocol_entry
+              EXPORTING
+                i_msgid     = 'ZMSG'
+                i_msgty     = 'E'
+                i_msgno     = '001'
+                i_msgv1     = 'Šarže je již obsažena v databázové tabulce.'
+                i_fieldname = ls_modi-fieldname
+                i_row_id    = ls_modi-row_id.
+
+          ENDLOOP.
+
+          CLEAR: lt_error, ls_error.
+        ENDIF.
+
+        IF strlen( lv_charg ) <> lv_length.
+
+          " Chybná hodnota => přidáme do seznamu chyb
+          ls_error = ls_modi.
+          APPEND ls_error TO lt_error.
+
+          IF lt_error IS NOT INITIAL.
+            LOOP AT lt_error INTO ls_modi.
+              CALL METHOD er_data_changed->add_protocol_entry
+                EXPORTING
+                  i_msgid     = 'ZMSG'
+                  i_msgty     = 'E'
+                  i_msgno     = '001'
+                  i_msgv1     = 'Neplatné CHARG'
+                  i_fieldname = ls_modi-fieldname
+                  i_row_id    = ls_modi-row_id.
+
+            ENDLOOP.
+            CLEAR: lt_error, ls_error.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD handle_toolbar.
+
+    DATA lr_toolbar TYPE REF TO stb_button.
+
+    " Vytvoření nového bloku paměti pomocí NEW stb_button( ).
+    " Vyhnu se tím clearu, alokuji si pro každé new novou instanci
+    lr_toolbar = NEW stb_button( ).
+    lr_toolbar->butn_type = 3.
+    APPEND lr_toolbar->* TO e_object->mt_toolbar.
+
+    " Alokace paměti pro další tlačítka
+    lr_toolbar = NEW stb_button( ).
+    lr_toolbar->function  = 'ADD_ROW'.
+    lr_toolbar->icon      = icon_create.
+    lr_toolbar->quickinfo = TEXT-000.
+    lr_toolbar->text      = TEXT-000.
+    APPEND lr_toolbar->* TO e_object->mt_toolbar.
+
+    lr_toolbar = NEW stb_button( ).
+    lr_toolbar->function  = 'INSERT_ROW'.
+    lr_toolbar->icon      = icon_edit_file.
+    lr_toolbar->quickinfo = TEXT-002.
+    lr_toolbar->text      = TEXT-002.
+    APPEND lr_toolbar->* TO e_object->mt_toolbar.
+
+    lr_toolbar = NEW stb_button( ).
+    lr_toolbar->function  = 'ADD'.
+    lr_toolbar->icon      = icon_businav_process.
+    lr_toolbar->quickinfo = TEXT-001.
+    lr_toolbar->text      = TEXT-001.
+    APPEND lr_toolbar->* TO e_object->mt_toolbar.
+
+    lr_toolbar = NEW stb_button( ).
+    lr_toolbar->function  = 'DELETE'.
+    lr_toolbar->icon      = icon_delete.
+    lr_toolbar->quickinfo = TEXT-003.
+    lr_toolbar->text      = TEXT-003.
+    APPEND lr_toolbar->* TO e_object->mt_toolbar.
+
+  ENDMETHOD.
+
+  METHOD handle_user_command.
+
+    DATA: row    TYPE lvc_t_row,
+          lt_row TYPE lvc_t_row.
+
+    CASE e_ucomm.
+      WHEN  'ADD_ROW'.
+        add_row( ).   " přidej řádek
+        alv_edit( ).
+        alv_refresh( ).
+
+      WHEN 'INSERT_ROW'.
+        insert_row( ).   " vlož řádek do databáze
+        alv_edit( ).
+        alv_refresh( ).
+
+      WHEN  'ADD'.
+        update( ).   " ulož
+        alv_edit( ).
+        alv_refresh( ).
+
+      WHEN 'DELETE'.
+        delete( ).   " vymaž
+        alv_edit( ).
+        alv_refresh( ).
+    ENDCASE.
+
+
+  ENDMETHOD.
+
+
+ENDCLASS.                  "lcl_app IMPLEMENTATION
+
+DATA go_inst TYPE REF TO lcl_app.
+
+MODULE status_0100 OUTPUT.
+
+  SET PF-STATUS 'STATUS_0100'.
+
+  SET TITLEBAR '0102' .
+
+  go_inst->alv_create( ).
+
+ENDMODULE.                 " STATUS_0100  OUTPUT
+
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'CANC' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.                 " USER_COMMAND_0100  INPUT
+
+
+INITIALIZATION.
+
+  CLEAR gs_variant.
+  gs_variant-report = sy-repid.
+
+  CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+    EXPORTING
+      i_save     = 'A'
+    CHANGING
+      cs_variant = gs_variant
+    EXCEPTIONS
+      not_found  = 2.
+
+  IF sy-subrc = 0.
+    p_varnt = gs_variant-variant.
+  ENDIF.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_varnt.
+
+  DATA  lv_exit TYPE c.
+
+  CALL FUNCTION 'REUSE_ALV_VARIANT_F4'
+    EXPORTING
+      is_variant = gs_variant
+      i_save     = 'A'
+    IMPORTING
+      e_exit     = lv_exit
+      es_variant = gs_variant
+    EXCEPTIONS
+      not_found  = 2.
+
+  IF sy-subrc = 2.
+    MESSAGE ID sy-msgid TYPE 'S' NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ELSE.
+    IF lv_exit EQ space.
+      p_varnt = gs_variant-variant.
+    ENDIF.
+  ENDIF.
+
+START-OF-SELECTION.
+
+* 🚀
+  CREATE OBJECT go_inst.
+  go_inst->run( ).
