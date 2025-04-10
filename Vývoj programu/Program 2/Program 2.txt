@@ -1,0 +1,296 @@
+*&---------------------------------------------------------------------*
+*& Report ZPP_API_MATRIX_MAINT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zpp_api_matrix_maint.
+
+* 📌 TABLE: ZPP_API_MATRIX
+* 📌 Structure: ZPP_API_MATRIX_STR
+
+DATA: sap_id TYPE matnr,
+      werks  TYPE werks_d,
+      api_id TYPE idnrk,
+      charg  TYPE charg_d,
+      datuv	 TYPE dats,
+      datub	 TYPE dats.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+  SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+    SELECT-OPTIONS: s_sap_id FOR sap_id NO INTERVALS,
+                    s_werks  FOR werks  NO INTERVALS,
+                    s_api_id FOR api_id NO INTERVALS,
+                    s_charg  FOR charg  NO INTERVALS,
+                    s_datuv  FOR datuv  NO INTERVALS,
+                    s_datub  FOR datub  NO INTERVALS.
+  SELECTION-SCREEN END OF BLOCK b2.
+SELECTION-SCREEN END OF BLOCK b1.
+
+* 📌  layout selection
+SELECTION-SCREEN BEGIN OF BLOCK b05 WITH FRAME TITLE TEXT-b05.
+  PARAMETERS: p_varnt LIKE disvariant-variant.
+SELECTION-SCREEN END OF BLOCK b05.
+
+DATA: gs_variant TYPE          disvariant.
+
+TYPES: BEGIN OF ty_zpp_api_matrix_str,
+         sap_id           TYPE matnr,
+         maktx            TYPE maktx,
+         destination      TYPE char2,
+         inn_device       TYPE char40,
+         mzp              TYPE numc2,
+         charg            TYPE charg_d,
+         production_plant TYPE char4,
+         mzp_csp          TYPE numc2,
+         api_id           TYPE matnr,
+         api_name         TYPE maktx,
+         mzp_bc           TYPE char40,
+         datuv            TYPE dats,
+         datub            TYPE dats,
+         gris_relevation  TYPE char40,
+         verify           TYPE char1,
+       END OF ty_zpp_api_matrix_str.
+
+CLASS lcl_app DEFINITION.
+  PUBLIC SECTION.
+* 📌  Přidat konstanty a veřejná data
+
+    METHODS:
+      run,         " 🚀
+
+      read,        " ℹ️
+      update,      " ✅
+      delete,      " ❌
+      display,     " 💡
+      alv_create,  " ✅
+      alv_refresh, " 🔄
+      alv_edit,    " ✏️
+      alv_edit_after_update, " ✏️✅
+      alv_edit_after_delete, " ✏️❌
+
+      handle_toolbar FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm.
+
+  PRIVATE SECTION.
+* 📌  Přidat modulární proměnné
+    DATA: mo_grid             TYPE REF TO   cl_gui_alv_grid,
+          mo_custom_container TYPE REF TO   cl_gui_custom_container,
+
+          mt_data             TYPE TABLE OF ty_zpp_api_matrix_str.
+
+ENDCLASS.                          "lcl_app DEFINITION
+
+CLASS lcl_app IMPLEMENTATION.
+  METHOD run.
+
+    IF p_varnt IS NOT INITIAL.
+      gs_variant-variant = p_varnt.
+    ENDIF.
+
+    read( ).
+    alv_edit( ).
+    display( ).
+  ENDMETHOD.
+
+  METHOD read.  " Projedu tabulku MAST -> získám stlnr a projedu tabulku STPO
+
+    DATA: lt_zpp_api_matrix TYPE TABLE OF zpp_api_matrix,
+          lt_data           TYPE TABLE OF ty_zpp_api_matrix_str,
+          lt_makt_matnr     TYPE TABLE OF makt,
+          lt_makt_idnrk     TYPE TABLE OF makt.
+
+    SELECT *
+      FROM zpp_api_matrix
+      INTO TABLE @lt_zpp_api_matrix
+        WHERE sap_id = @s_sap_id-low
+        AND   werks  = @s_werks-low.
+
+*✅ naplnění daty tabulku struktury lt_data
+    lt_data = CORRESPONDING #( lt_zpp_api_matrix ). "💡 Přesun všech řádků
+
+*✅ Naplnění tabulky s krátkým textem materiálu
+    SELECT * FROM makt
+     INTO CORRESPONDING FIELDS OF TABLE lt_makt_matnr
+     FOR ALL ENTRIES IN lt_zpp_api_matrix
+     WHERE matnr = lt_zpp_api_matrix-sap_id.
+
+*✅ Naplnění tabulky s krátkým textem komponenty
+    SELECT * FROM makt
+     INTO CORRESPONDING FIELDS OF TABLE lt_makt_idnrk
+     FOR ALL ENTRIES IN lt_zpp_api_matrix
+     WHERE matnr = lt_zpp_api_matrix-api_id.
+
+
+* ✏️ načíst maktx pro Hotový výrovek
+    LOOP AT lt_data INTO DATA(ls_data). "
+
+      READ TABLE lt_makt_matnr REFERENCE INTO DATA(lr_makt_matnr)
+      WITH KEY matnr = ls_data-sap_id
+               spras = sy-langu.
+
+      IF sy-subrc = 0.
+        ls_data-maktx = lr_makt_matnr->maktx.
+      ELSE.
+        READ TABLE lt_makt_matnr REFERENCE INTO lr_makt_matnr
+        WITH KEY matnr = ls_data-sap_id.
+
+        IF sy-subrc = 0.
+          ls_data-maktx = lr_makt_matnr->maktx.
+        ELSE.
+          ls_data-maktx = space.
+        ENDIF.
+      ENDIF.
+
+*✏️ Doplnění destinace pomocí splitu a readu
+      IF ls_data-maktx IS NOT INITIAL.
+        DATA(lv_string) = ls_data-maktx.
+        SPLIT lv_string AT '(' INTO TABLE DATA(lt_parts).
+
+        DATA(lv_substring) = lt_parts[ 2 ].
+
+        SPLIT lv_substring AT ')' INTO TABLE lt_parts.
+        lv_substring = lt_parts[ 1 ].
+
+        ls_data-destination = lv_substring.
+      ENDIF.
+
+
+*✏️ načíst maktx pro komponentu komponenty API_NAME
+      READ TABLE lt_makt_idnrk REFERENCE INTO DATA(lr_makt_idnrk)
+      WITH KEY matnr = ls_data-api_id
+               spras = sy-langu.
+
+      IF sy-subrc = 0.
+        ls_data-api_name = lr_makt_idnrk->maktx.
+      ELSE.
+        READ TABLE lt_makt_idnrk REFERENCE INTO lr_makt_idnrk
+        WITH KEY matnr = ls_data-api_id.
+
+        IF sy-subrc = 0.
+          ls_data-api_name = lr_makt_idnrk->maktx.
+        ELSE.
+          ls_data-api_name = space.
+        ENDIF.
+      ENDIF.
+
+
+
+
+      APPEND ls_data TO mt_data.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD update.
+
+  ENDMETHOD.
+
+  METHOD delete.
+
+  ENDMETHOD.
+
+  METHOD display.
+    CALL SCREEN 0100.
+  ENDMETHOD.
+
+  METHOD alv_create.
+
+  ENDMETHOD.
+
+  METHOD alv_refresh.
+
+  ENDMETHOD.
+
+  METHOD alv_edit.
+
+  ENDMETHOD.
+
+  METHOD alv_edit_after_update.
+
+  ENDMETHOD.
+
+  METHOD alv_edit_after_delete.
+
+  ENDMETHOD.
+
+  METHOD handle_toolbar.
+
+  ENDMETHOD.
+
+  METHOD handle_user_command.
+
+  ENDMETHOD.
+
+
+ENDCLASS.                  "lcl_app IMPLEMENTATION
+
+
+
+DATA go_inst TYPE REF TO lcl_app.
+
+MODULE status_0100 OUTPUT.
+
+  SET PF-STATUS 'STATUS_0100'.
+
+  SET TITLEBAR '0102' .
+
+  go_inst->alv_create( ).
+
+ENDMODULE.                 " STATUS_0100  OUTPUT
+
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'CANC' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.                 " USER_COMMAND_0100  INPUT
+
+INITIALIZATION.
+
+  CLEAR gs_variant.
+  gs_variant-report = sy-repid.
+
+  CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+    EXPORTING
+      i_save     = 'A'
+    CHANGING
+      cs_variant = gs_variant
+    EXCEPTIONS
+      not_found  = 2.
+
+  IF sy-subrc = 0.
+    p_varnt = gs_variant-variant.
+  ENDIF.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_varnt.
+
+  DATA  lv_exit TYPE c.
+
+  CALL FUNCTION 'REUSE_ALV_VARIANT_F4'
+    EXPORTING
+      is_variant = gs_variant
+      i_save     = 'A'
+    IMPORTING
+      e_exit     = lv_exit
+      es_variant = gs_variant
+    EXCEPTIONS
+      not_found  = 2.
+
+  IF sy-subrc = 2.
+    MESSAGE ID sy-msgid TYPE 'S' NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ELSE.
+    IF lv_exit EQ space.
+      p_varnt = gs_variant-variant.
+    ENDIF.
+  ENDIF.
+
+START-OF-SELECTION.
+
+* 🚀
+  CREATE OBJECT go_inst.
+  go_inst->run( ).
